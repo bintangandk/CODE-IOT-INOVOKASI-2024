@@ -24,22 +24,29 @@ float humidity;
 float temperature;
 float nilai_Amonia;
 
+//////////////// Milis For send data
 unsigned long previousMillis = 0;
 const long interval = 60000; // Interval 1 menit (60000 ms)
 
+//////////////// Milis For control Relay
+unsigned long previousMillis2 = 0;
+const long interval2 = 1000; // Interval 1 detik (1000 ms)
+
 // HTTP client Config
-const char *ssid = "KSI-STUDENT";
-const char *password = "12344321";
+const char *ssid = "Kontrak 1";
+const char *password = "bayardulu123";
 const int id_device = 1;
 
-// Declare a constant char pointer for the running mode description
-const char *run_program = "";
+// Control Relay
+const char *id_alat_ctrl;
+const char *control_type;
+int control_value; // Mengubah control_value menjadi tipe int
 
-/////////////////// Pemilihan alat ////////////////////
-#define PENETASAN_ITIK 0 // Set to 1 to enable
-#define NURSERY_KOPI 1   // Set to 1 to enable
-#define KANDANG_AYAM 0   // Set to 1 to enable
-//////////////////////////////////////////////////////
+/////////////////// Pemilihan alat /////////////////////////
+#define PENETASAN_ITIK 0 // Set to 1 to enable, 0 to disable
+#define NURSERY_KOPI 1   // Set to 1 to enable, 0 to disable
+#define KANDANG_AYAM 0   // Set to 1 to enable, 0 to disable
+////////////////////////////////////////////////////////////
 
 // Conditional compilation check to ensure only one feature is enabled
 #if (PENETASAN_ITIK + NURSERY_KOPI + KANDANG_AYAM) > 1
@@ -56,8 +63,9 @@ const char URL_amonia[] = "http://iqacs-chick.research-ai.my.id/public/amonia_da
 const char URL_humidity[] = "http://iqacs-chick.research-ai.my.id/public/humidity_data.php";
 #elif NURSERY_KOPI == 1
 // Code specific to Feature 2
-const char URL_humidity[] = "https://is4ac-nursery.research-ai.my.id/api/device/humidity";
-const char URL_temperature[] = "https://is4ac-nursery.research-ai.my.id/api/device/temperature";
+const char URL_humidity[] = "https://is4ac-nursery.research-ai.my.id/public/humidity_data.php";
+const char URL_temperature[] = "https://is4ac-nursery.research-ai.my.id/public/temperature_data.php";
+const char URL_control_relay[] = "http://is4ac-nursery.research-ai.my.id/public/controlPHP.php";
 #elif KANDANG_AYAM == 1
 // Code specific to Feature 3
 const char URL_temperature[] = "http://iqacs-chick.research-ai.my.id/public/temperature_data.php";
@@ -177,32 +185,130 @@ void handleAllLed(bool ledMerah, bool ledKuning, bool ledBiru)
 }
 
 // Mengirim data menggunakan char array alih-alih String
-void sendDataHandle(const int idalat, float nilaisensor, const char *URL)
+// void sendDataHandle(const int idalat, float nilaisensor, const char *URL)
+// {
+//   char postData[100]; // Memastikan buffer cukup untuk menampung data
+//   snprintf(postData, sizeof(postData), "id_alat=%d&nilai=%.2f", idalat, nilaisensor);
+
+//   WiFiClient client;
+//   HTTPClient http;
+//   http.begin(client, URL);
+//   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+
+//   int httpCode = http.POST(postData);
+//   String payload = http.getString();
+//   Serial.println(URL);
+//   Serial.println(postData);
+//   if (httpCode > 0)
+//   {
+//     String payload = http.getString();
+//     Serial.println("Response: " + payload);
+//   }
+//   else
+//   {
+//     Serial.printf("Error on HTTP request: %s\n", http.errorToString(httpCode).c_str());
+//   }
+
+//   http.end();
+// }
+
+// Mengirim data String
+void sendDataHandle(const int idalat, float nilaisensor, String URL)
 {
-  char postData[100]; // Memastikan buffer cukup untuk menampung data
-  snprintf(postData, sizeof(postData), "id_alat=%d&nilai=%.2f", idalat, nilaisensor);
+  String postData = (String) "id_alat=" + idalat + "&nilai=" + nilaisensor;
 
   WiFiClient client;
   HTTPClient http;
   http.begin(client, URL);
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
-
-  int httpCode = http.POST(postData);
+  auto httpCode = http.POST(postData);
   String payload = http.getString();
   Serial.println(URL);
   Serial.println(postData);
-  if (httpCode > 0)
-  {
-    String payload = http.getString();
-    Serial.println("Response: " + payload);
-  }
-  else
-  {
-    Serial.printf("Error on HTTP request: %s\n", http.errorToString(httpCode).c_str());
-  }
+  Serial.println(payload);
 
   http.end();
 }
+#if NURSERY_KOPI == 1
+void handleControl(int action_value)
+{
+  Serial.println(action_value);
+  delay(1);
+  if (action_value == 1)
+  {
+    digitalWrite(PINRELAY, LOW);
+    Serial.println("led hidup");
+    delay(10);
+  }
+  else if (action_value == 0)
+  { // Memastikan untuk mematikan LED jika action_value 0
+    digitalWrite(PINRELAY, HIGH);
+    Serial.println("led mati");
+    delay(10);
+  }
+  else
+  {
+    Serial.println("Wrong State Value");
+  }
+}
+
+void reciveDataHandle()
+{
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    HTTPClient http;
+    WiFiClient client;
+    http.begin(client, URL_control_relay);
+    int httpCode = http.GET();
+
+    if (httpCode == HTTP_CODE_OK)
+    {
+      String payload = http.getString();
+      Serial.println("Data dari server:");
+      Serial.println(payload.c_str());
+
+      // Membuat salinan dari `payload` untuk digunakan oleh `strtok`
+      char data[100];
+      payload.toCharArray(data, 100);
+
+      // Memisahkan data menggunakan delimiter koma
+      id_alat_ctrl = strtok(data, ",");
+      control_type = strtok(NULL, ",");
+      const char *control_value_str = strtok(NULL, ","); // Simpan hasil strtok
+
+      if (id_alat_ctrl != NULL && control_type != NULL && control_value_str != NULL)
+      {
+        Serial.print("ID Alat: ");
+        Serial.println(id_alat_ctrl);
+        Serial.print("Control Type: ");
+        Serial.println(control_type);
+        Serial.print("Control Value: ");
+        Serial.println(control_value_str);
+
+        // Konversi `control_value_str` ke integer
+        control_value = atoi(control_value_str); // Mengonversi string ke integer
+      }
+      else
+      {
+        Serial.println("Data tidak lengkap atau format salah.");
+      }
+    }
+    else
+    {
+      Serial.println("Gagal terhubung ke server, Kode HTTP: " + String(httpCode));
+    }
+
+    http.end();
+  }
+  else
+  {
+    Serial.println("Koneksi WiFi terputus!");
+  }
+
+  // Kontrol perangkat berdasarkan nilai `control_value`
+  handleControl(control_value);
+}
+#endif
 
 void handleLEDState()
 {
@@ -295,12 +401,25 @@ void loop()
 {
   Serial.println("Run Loop Program");
   delay(2000);
+  unsigned long currentMillis = millis();
+  unsigned long currentMillis2 = millis();
 
   CheckAllSensor();
   handleLEDState();
   showSensorError();
   Serial.println(DHTCondition);
   Serial.println(MQ135Condition);
+
+#if NURSERY_KOPI == 1
+  if (currentMillis2 - previousMillis2 >= interval2)
+  {
+    previousMillis2 = currentMillis2;
+    reciveDataHandle();
+    handleControl(control_value);
+    delay(10);
+  }
+#endif
+
   if (DHTCondition && MQ135Condition)
   {
     Serial.println("Data Siap Di Kirim");
@@ -314,34 +433,35 @@ void loop()
 #if PENETASAN_ITIK == 1 || KANDANG_AYAM == 1
       sendDataHandle(id_device, temperature, URL_temperature);
       digitalWrite(PINLEDHijau, HIGH);
-      delay(200);
+      delay(1000);
       digitalWrite(PINLEDHijau, LOW);
-      delay(200);
+      delay(1000);
 
       sendDataHandle(id_device, humidity, URL_humidity);
       digitalWrite(PINLEDHijau, HIGH);
-      delay(200);
+      delay(1000);
       digitalWrite(PINLEDHijau, LOW);
-      delay(200);
+      delay(1000);
 
       sendDataHandle(id_device, nilai_Amonia, URL_amonia);
       digitalWrite(PINLEDHijau, HIGH);
-      delay(200);
+      delay(1000);
       digitalWrite(PINLEDHijau, LOW);
-      delay(200);
+      delay(1000);
 
 #elif NURSERY_KOPI == 1
+
       sendDataHandle(id_device, temperature, URL_temperature);
       digitalWrite(PINLEDHijau, HIGH);
-      delay(200);
+      delay(1000);
       digitalWrite(PINLEDHijau, LOW);
-      delay(200);
+      delay(1000);
 
       sendDataHandle(id_device, humidity, URL_humidity);
       digitalWrite(PINLEDHijau, HIGH);
-      delay(200);
+      delay(1000);
       digitalWrite(PINLEDHijau, LOW);
-      delay(200);
+      delay(1000);
 #endif
     }
   }

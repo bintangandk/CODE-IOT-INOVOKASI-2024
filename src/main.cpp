@@ -33,9 +33,9 @@ unsigned long previousMillis2 = 0;
 const long interval2 = 1000; // Interval 1 detik (1000 ms)
 
 // HTTP client Config
-const char *ssid = "Kontrak 1";
-const char *password = "bayardulu123";
-const int id_device = 1;
+const char *ssid = "SSID13";
+const char *password = "1sampai8";
+const int id_device = 7;
 
 // Control Relay
 const char *id_alat_ctrl;
